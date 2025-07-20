@@ -40,25 +40,26 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
     if (!isDragging) return;
 
     if (firstMouse) {
-        lastX = static_cast<float>(xpos);
-        lastY = static_cast<float>(ypos);
+        lastX = xpos;
+        lastY = ypos;
         firstMouse = false;
         return;
     }
 
-    float xoffset = static_cast<float>(xpos) - lastX;
-    float yoffset = lastY - static_cast<float>(ypos);
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; 
 
-    lastX = static_cast<float>(xpos);
-    lastY = static_cast<float>(ypos);
+    lastX = xpos;
+    lastY = ypos;
 
-    float sensitivity = 0.2f;
+    float sensitivity = 0.1f; 
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
     yaw += xoffset;
-    pitch -= yoffset;
+    pitch -= yoffset; 
 
+    
     if (pitch > 89.0f) pitch = 89.0f;
     if (pitch < -89.0f) pitch = -89.0f;
 }
@@ -102,19 +103,19 @@ uniform vec3 viewPos;
 out vec4 FragColor;
 
 void main() {
-    // Iluminação básica
+    /*--[ Iluminação básica ]--*/
     vec3 color = texture(texture1, TexCoord).rgb;
     
-    // Ambient
+    /*--[ Ambient ]--*/
     vec3 ambient = 0.3 * color;
     
-    // Diffuse
+    /*--[ Diffuse ]--*/
     vec3 lightDir = normalize(LightPos - FragPos);
     vec3 normal = normalize(Normal);
     float diff = max(dot(lightDir, normal), 0.0);
     vec3 diffuse = diff * color;
     
-    // Specular
+    /*--[ Specular ]--*/
     vec3 viewDir = normalize(viewPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
@@ -125,76 +126,63 @@ void main() {
 )";
 
 void generateTube(std::vector<float>& vertices, std::vector<unsigned int>& indices, 
-                  float outerRadius, float innerRadius, float height, int segments) {
-    
+                  float innerRadius, float outerRadius, float height, int segments) {
+    const float PI = 3.14159265359f;
     vertices.clear();
     indices.clear();
     
-    const float angleStep = 2.0f * M_PI / segments;
-    
-    for (int i = 0; i <= segments; ++i) {
-        float angle = i * angleStep;
-        float cosA = cos(angle);
-        float sinA = sin(angle);
+    for (int i = 0; i < segments; i++) {
+        float theta = 2.0f * PI * i / segments;
+        float cosTheta = cos(theta);
+        float sinTheta = sin(theta);
         
-        vertices.insert(vertices.end(), {
-            outerRadius * cosA, height / 2.0f, outerRadius * sinA, 
-            cosA, 0.0f, sinA,                                      
-            static_cast<float>(i) / segments, 1.0f                 
-        });
+        vertices.push_back(outerRadius * cosTheta);
+        vertices.push_back(outerRadius * sinTheta);
+        vertices.push_back(0.0f);                  
+        vertices.push_back(cosTheta);              
+        vertices.push_back(sinTheta);              
+        vertices.push_back(0.0f);                  
+        vertices.push_back(2.0f * (float)i / segments);
+        vertices.push_back(0.0f);
         
-        vertices.insert(vertices.end(), {
-            innerRadius * cosA, height / 2.0f, innerRadius * sinA, 
-            -cosA, 0.0f, -sinA,                                    
-            static_cast<float>(i) / segments, 0.0f                 
-        });
+        vertices.push_back(outerRadius * cosTheta);
+        vertices.push_back(outerRadius * sinTheta);
+        vertices.push_back(height);
+        vertices.push_back(cosTheta);
+        vertices.push_back(sinTheta);
+        vertices.push_back(0.0f);
+        vertices.push_back(2.0f * (float)i / segments); 
+        vertices.push_back(1.0f);
         
-        vertices.insert(vertices.end(), {
-            outerRadius * cosA, -height / 2.0f, outerRadius * sinA, 
-            cosA, 0.0f, sinA,                                       
-            static_cast<float>(i) / segments, 1.0f                  
-        });
+        vertices.push_back(innerRadius * cosTheta);
+        vertices.push_back(innerRadius * sinTheta);
+        vertices.push_back(0.0f);
+        vertices.push_back(-cosTheta);             
+        vertices.push_back(-sinTheta);
+        vertices.push_back(0.0f);
+        vertices.push_back(2.0f * (float)i / segments);
+        vertices.push_back(0.0f);
         
-    
-        vertices.insert(vertices.end(), {
-            innerRadius * cosA, -height / 2.0f, innerRadius * sinA, 
-            -cosA, 0.0f, -sinA,                                     
-            static_cast<float>(i) / segments, 0.0f                  
-        });
+        vertices.push_back(innerRadius * cosTheta);
+        vertices.push_back(innerRadius * sinTheta);
+        vertices.push_back(height);
+        vertices.push_back(-cosTheta);
+        vertices.push_back(-sinTheta);
+        vertices.push_back(0.0f);
+        vertices.push_back(2.0f * (float)i / segments); 
+        vertices.push_back(1.0f);              
     }
     
-    
-    for (int i = 0; i < segments; ++i) {
-        int i0 = i * 4;         
-        int i1 = i0 + 1;        
-        int i2 = i0 + 2;        
-        int i3 = i0 + 3;        
-        
-        int n0 = ((i + 1) % (segments + 1)) * 4;    
-        int n1 = n0 + 1;        
-        int n2 = n0 + 2;        
-        int n3 = n0 + 3;        
+    for (int i = 0; i < segments; i++) {
+        int next = (i + 1) % segments;
+        int i0 = i * 4, i1 = i * 4 + 1, i2 = i * 4 + 2, i3 = i * 4 + 3;
+        int n0 = next * 4, n1 = next * 4 + 1, n2 = next * 4 + 2, n3 = next * 4 + 3;
         
         
-        indices.insert(indices.end(), {
-            static_cast<unsigned int>(i0), static_cast<unsigned int>(i2), static_cast<unsigned int>(n0),
-            static_cast<unsigned int>(n0), static_cast<unsigned int>(i2), static_cast<unsigned int>(n2)
-        });
-        
-        indices.insert(indices.end(), {
-            static_cast<unsigned int>(i1), static_cast<unsigned int>(n1), static_cast<unsigned int>(i3),
-            static_cast<unsigned int>(n1), static_cast<unsigned int>(n3), static_cast<unsigned int>(i3)
-        });
-        
-        indices.insert(indices.end(), {
-            static_cast<unsigned int>(i0), static_cast<unsigned int>(n0), static_cast<unsigned int>(i1),
-            static_cast<unsigned int>(n0), static_cast<unsigned int>(n1), static_cast<unsigned int>(i1)
-        });
-        
-        indices.insert(indices.end(), {
-            static_cast<unsigned int>(i2), static_cast<unsigned int>(i3), static_cast<unsigned int>(n2),
-            static_cast<unsigned int>(n2), static_cast<unsigned int>(i3), static_cast<unsigned int>(n3)
-        });
+        indices.insert(indices.end(), { i0, i1, n1, i0, n1, n0 });
+        indices.insert(indices.end(), { i2, n2, n3, i2, n3, i3 });
+        indices.insert(indices.end(), { i1, n1, n3, i1, n3, i3 });
+        indices.insert(indices.end(), { i0, n0, n2, i0, n2, i2 });
     }
 }
 
@@ -296,7 +284,7 @@ int main() {
 
     std::vector<float> vertices;
     std::vector<unsigned int> indices;
-    generateTube(vertices, indices, 1.0f, 0.6f, 2.0f, 32); // raio externo, interno, altura, segmentos
+    generateTube(vertices, indices, 1.0f, 0.6f, 2.0f, 32);
 
     GLuint VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
