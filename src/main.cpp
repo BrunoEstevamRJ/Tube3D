@@ -1,7 +1,8 @@
 /*
- * Tube.cpp + Light Source Cube
+ * Tube.cpp + Light Source Sphere + Chão
  *
- * Renderização de um tubo 3D com OpenGL, com fonte de luz visualizada por um cubo
+ * Renderização de um tubo 3D com OpenGL, fonte de luz visualizada por uma esfera em órbita
+ * e chão para observar projeção de iluminação.
  * Autor: BrunoEstevamRJ
  */
 
@@ -19,7 +20,6 @@
 #include "stb_image.h"
 
 #define WINDOW_TITLE "Tube Renderer"
-
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
@@ -42,52 +42,20 @@ float lastFrame = 0.0f;
 
 glm::vec3 lightPos(2.0f, 2.0f, 2.0f);
 
-       /*--[Cube ]--*/
-float lightCubeVertices[] = {
-    // positions         // normals
-    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-     0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-    -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-
-    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-     0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-
-    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-     0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+/*--[ Chão ]--*/
+float groundVertices[] = {
+    // x, y, z,     normal x, y, z,      texcoord u, v
+    -10.0f, -1.0f, -10.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
+     10.0f, -1.0f, -10.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
+     10.0f, -1.0f,  10.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,
+    -10.0f, -1.0f,  10.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f
+};
+unsigned int groundIndices[] = {
+    0, 1, 2,
+    2, 3, 0
 };
 
+/*--[ Shaders ]--*/
 const char* vertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -109,7 +77,6 @@ void main() {
     Normal = mat3(transpose(inverse(model))) * aNormal;
     TexCoord = aTexCoord;
     LightPos = lightPos;
-    
     gl_Position = projection * view * vec4(FragPos, 1.0);
 }
 )";
@@ -141,7 +108,7 @@ void main() {
 }
 )";
 
-/*--[ Cube Light ]--*/
+/*--[ Shader da esfera de luz ]--*/
 const char* lightVertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -156,10 +123,47 @@ const char* lightFragmentShaderSource = R"(
 #version 330 core
 out vec4 FragColor;
 void main() {
-    FragColor = vec4(1.0f); /*--[ LightCube Color ]--*/
+    FragColor = vec4(1.0f); // branco
 }
 )";
 
+/*--[ Gerador de Esfera ]--*/
+void generateSphere(std::vector<float>& vertices, std::vector<unsigned int>& indices,
+                   float radius, int sectorCount, int stackCount) {
+    const float PI = 3.14159265359f;
+    vertices.clear();
+    indices.clear();
+
+    for(int i = 0; i <= stackCount; ++i) {
+        float stackAngle = PI / 2 - i * PI / stackCount;
+        float xy = radius * cosf(stackAngle);
+        float z = radius * sinf(stackAngle);
+
+        for(int j = 0; j <= sectorCount; ++j) {
+            float sectorAngle = j * 2 * PI / sectorCount;
+            float x = xy * cosf(sectorAngle);
+            float y = xy * sinf(sectorAngle);
+            
+            vertices.insert(vertices.end(), {
+                x, y, z,
+                x/radius, y/radius, z/radius,
+                (float)j / sectorCount, (float)i / stackCount
+            });
+        }
+    }
+    for(int i = 0; i < stackCount; ++i) {
+        int k1 = i * (sectorCount + 1);
+        int k2 = k1 + sectorCount + 1;
+        for(int j = 0; j < sectorCount; ++j, ++k1, ++k2) {
+            if(i != 0)
+                indices.insert(indices.end(), {k1, k2, k1+1});
+            if(i != (stackCount-1))
+                indices.insert(indices.end(), {k1+1, k2, k2+1});
+        }
+    }
+}
+
+/*--[ Gerador de Tubo ]--*/
 void generateTube(std::vector<float>& vertices, std::vector<unsigned int>& indices, 
                   float innerRadius, float outerRadius, float height, int segments) {
     const float PI = 3.14159265359f;
@@ -199,10 +203,22 @@ void generateTube(std::vector<float>& vertices, std::vector<unsigned int>& indic
         int n1 = (i + 1) * 4 + 1;
         int n2 = (i + 1) * 4 + 2;
         int n3 = (i + 1) * 4 + 3;
-        indices.insert(indices.end(), { i0, i1, n1, i0, n1, n0 });
-        indices.insert(indices.end(), { i2, n2, n3, i2, n3, i3 });
-        indices.insert(indices.end(), { i1, n1, n3, i1, n3, i3 });
-        indices.insert(indices.end(), { i0, i2, n2, i0, n2, n0 });
+        indices.insert(indices.end(), { 
+            (unsigned int)i0, (unsigned int)i1, (unsigned int)n1, 
+            (unsigned int)i0, (unsigned int)n1, (unsigned int)n0
+        });
+        indices.insert(indices.end(), { 
+            (unsigned int)i2, (unsigned int)n2, (unsigned int)n3,
+            (unsigned int)i2, (unsigned int)n3, (unsigned int)i3 
+        });
+        indices.insert(indices.end(), { 
+            (unsigned int)i1, (unsigned int)n1, (unsigned int)n3, 
+            (unsigned int)i1, (unsigned int)n3, (unsigned int)i3 
+        });
+        indices.insert(indices.end(), { 
+            (unsigned int)i0, (unsigned int)i2, (unsigned int)n2, 
+            (unsigned int)i0, (unsigned int)n2, (unsigned int)n0
+        });
     }
 }
 
@@ -293,6 +309,7 @@ int main() {
     GLuint shaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);
     GLuint lightShaderProgram = CreateShaderProgram(lightVertexShaderSource, lightFragmentShaderSource);
 
+    // Tubo
     std::vector<float> tubeVertices;
     std::vector<unsigned int> tubeIndices;
     generateTube(tubeVertices, tubeIndices, 0.6f, 1.0f, 2.0f, 32);
@@ -316,15 +333,44 @@ int main() {
     glEnableVertexAttribArray(2);
 
     GLuint tubeTexture = CreateTexture("wall.jpg");
+    GLuint groundTexture = CreateTexture("ground.jpg");
 
-    GLuint lightVAO, lightVBO;
-    glGenVertexArrays(1, &lightVAO);
-    glGenBuffers(1, &lightVBO);
-    glBindVertexArray(lightVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, lightVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(lightCubeVertices), lightCubeVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    // Esfera de luz
+    std::vector<float> sphereVertices;
+    std::vector<unsigned int> sphereIndices;
+    generateSphere(sphereVertices, sphereIndices, 0.5f, 32, 16); // raio pequeno
+
+    GLuint sphereVAO, sphereVBO, sphereEBO;
+    glGenVertexArrays(1, &sphereVAO);
+    glGenBuffers(1, &sphereVBO);
+    glGenBuffers(1, &sphereEBO);
+
+    glBindVertexArray(sphereVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
+    glBufferData(GL_ARRAY_BUFFER, sphereVertices.size() * sizeof(float), sphereVertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(unsigned int), sphereIndices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+
+    // Chão
+    GLuint groundVAO, groundVBO, groundEBO;
+    glGenVertexArrays(1, &groundVAO);
+    glGenBuffers(1, &groundVBO);
+    glGenBuffers(1, &groundEBO);
+
+    glBindVertexArray(groundVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, groundVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(groundVertices), groundVertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, groundEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(groundIndices), groundIndices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
     while (!glfwWindowShouldClose(window)) {
@@ -341,6 +387,7 @@ int main() {
                                                0.1f, 100.0f);
         glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
+        // Tubo
         glUseProgram(shaderProgram);
         glm::mat4 model = glm::mat4(1.0f);
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
@@ -351,20 +398,40 @@ int main() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tubeTexture);
         glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
+        GLuint groundTexture = CreateTexture("ground.jpg");
         glBindVertexArray(tubeVAO);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(tubeIndices.size()), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(tubeIndices.size()), GL_UNSIGNED_INT, 0);        
+        glBindVertexArray(0);
 
-        /*---[ Render Light Cube ]---*/
-/*******************************************************************************/        
+        // Chão
+        glUseProgram(shaderProgram);
+        glm::mat4 groundModel = glm::mat4(1.0f);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(groundModel));
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+        glUniform3fv(glGetUniformLocation(shaderProgram, "lightPos"), 1, glm::value_ptr(lightPos));
+        glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, groundTexture);
+        glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
+        glBindVertexArray(groundVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+
+        // Luz em órbita
+        float time = glfwGetTime();
+        lightPos.x = 5.0f * sin(time);
+        lightPos.z = 5.0f * cos(time);
+
+        // Esfera de luz
         glUseProgram(lightShaderProgram);
         glm::mat4 lightModel = glm::mat4(1.0f);
         lightModel = glm::translate(lightModel, lightPos); 
-        lightModel = glm::scale(lightModel, glm::vec3(0.5f));
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(lightModel));
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-        glBindVertexArray(lightVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36); 
+        glBindVertexArray(sphereVAO);
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(sphereIndices.size()), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
@@ -375,11 +442,16 @@ int main() {
     glDeleteBuffers(1, &tubeVBO);
     glDeleteBuffers(1, &tubeEBO);
     glDeleteTextures(1, &tubeTexture);
-    glDeleteVertexArrays(1, &lightVAO);
-    glDeleteBuffers(1, &lightVBO);
+    glDeleteVertexArrays(1, &sphereVAO);
+    glDeleteBuffers(1, &sphereVBO);
+    glDeleteBuffers(1, &sphereEBO);
+    glDeleteVertexArrays(1, &groundVAO);
+    glDeleteBuffers(1, &groundVBO);
+    glDeleteBuffers(1, &groundEBO);
     glDeleteProgram(shaderProgram);
     glDeleteProgram(lightShaderProgram);
 
+    glDeleteTextures(1, &groundTexture);
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
