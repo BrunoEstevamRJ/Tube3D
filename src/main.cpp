@@ -1,14 +1,6 @@
-/*
- * Tube.cpp + Light Source Sphere + Chão
- *
- * Renderização de um tubo 3D com OpenGL, fonte de luz visualizada por uma esfera em órbita
- * e chão para observar projeção de iluminação.
- * Autor: BrunoEstevamRJ
- */
-
 #include <iostream>
-#include <vector>
-#include <cmath>
+#include <stdexcept>
+
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
@@ -16,488 +8,215 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "app_config.hpp"
+#include "camera_controller.hpp"
+#include "geometry.hpp"
+#include "gl_utils.hpp"
 
-#define WINDOW_TITLE "Tube Renderer"
+namespace {
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-float lastX = 400.0f, lastY = 300.0f;
-float yaw = -90.0f, pitch = 0.0f;
-bool firstMouse = true;
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void mouse_callback(GLFWwindow* window, double xpos, double ypos);
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void processInput(GLFWwindow *window);
-
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
-
-float deltaTime = 0.0f; 
-float lastFrame = 0.0f;
-
-glm::vec3 lightPos(2.0f, 2.0f, 2.0f);
-
-/*--[ Chão ]--*/
-float groundVertices[] = {
-    // x, y, z,     normal x, y, z,      texcoord u, v
-    -100.0f, -1.0f, -100.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
-     100.0f, -1.0f, -100.0f,   0.0f, 1.0f, 0.0f,   50.0f, 0.0f,
-     100.0f, -1.0f,  100.0f,   0.0f, 1.0f, 0.0f,   50.0f, 50.0f,
-    -100.0f, -1.0f,  100.0f,   0.0f, 1.0f, 0.0f,   0.0f, 50.0f
-};
-unsigned int groundIndices[] = {
-    0, 1, 2,
-    2, 3, 0
-};
-
-/*--[ Shaders ]--*/
-const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec3 aNormal;
-layout (location = 2) in vec2 aTexCoord;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-uniform vec3 lightPos;
-
-out vec3 FragPos;
-out vec3 Normal;
-out vec2 TexCoord;
-out vec3 LightPos;
-
-void main() {
-    FragPos = vec3(model * vec4(aPos, 1.0));
-    Normal = mat3(transpose(inverse(model))) * aNormal;
-    TexCoord = aTexCoord;
-    LightPos = lightPos;
-    gl_Position = projection * view * vec4(FragPos, 1.0);
-}
-)";
-
-const char* fragmentShaderSource = R"(
-#version 330 core
-in vec3 FragPos;
-in vec3 Normal;
-in vec2 TexCoord;
-in vec3 LightPos;
-
-uniform sampler2D texture1;
-uniform vec3 viewPos;
-
-out vec4 FragColor;
-
-void main() {
-    vec3 color = texture(texture1, TexCoord).rgb;
-    vec3 ambient = 0.1 * color;
-    vec3 lightDir = normalize(LightPos - FragPos);
-    vec3 normal = normalize(Normal);
-    float diff = max(dot(lightDir, normal), 0.0);
-    vec3 diffuse = diff * color;
-    vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = vec3(0.3) * spec;
-    FragColor = vec4(ambient + diffuse + specular, 1.0);
-}
-)";
-
-/*--[ Shader da esfera de luz ]--*/
-const char* lightVertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-void main() {
-    gl_Position = projection * view * model * vec4(aPos, 1.0);
-}
-)";
-const char* lightFragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-void main() {
-    FragColor = vec4(1.0f); // branco
-}
-)";
-
-/*--[ Gerador de Esfera ]--*/
-void generateSphere(std::vector<float>& vertices, std::vector<unsigned int>& indices,
-                   float radius, int sectorCount, int stackCount) {
-    const float PI = 3.14159265359f;
-    vertices.clear();
-    indices.clear();
-
-    for(int i = 0; i <= stackCount; ++i) {
-        float stackAngle = PI / 2 - i * PI / stackCount;
-        float xy = radius * cosf(stackAngle);
-        float z = radius * sinf(stackAngle);
-
-        for(int j = 0; j <= sectorCount; ++j) {
-            float sectorAngle = j * 2 * PI / sectorCount;
-            float x = xy * cosf(sectorAngle);
-            float y = xy * sinf(sectorAngle);
-            
-            vertices.insert(vertices.end(), {
-                x, y, z,
-                x/radius, y/radius, z/radius,
-                (float)j / sectorCount, (float)i / stackCount
-            });
-        }
-    }
-    for(int i = 0; i < stackCount; ++i) {
-        int k1 = i * (sectorCount + 1);
-        int k2 = k1 + sectorCount + 1;
-        for(int j = 0; j < sectorCount; ++j, ++k1, ++k2) {
-            if(i != 0)
-                indices.insert(indices.end(), {k1, k2, k1+1});
-            if(i != (stackCount-1))
-                indices.insert(indices.end(), {k1+1, k2, k2+1});
-        }
-    }
-}
-
-/*--[ Gerador de Tubo ]--*/
-void generateTube(std::vector<float>& vertices, std::vector<unsigned int>& indices, 
-                  float innerRadius, float outerRadius, float height, int segments) {
-    const float PI = 3.14159265359f;
-    vertices.clear();
-    indices.clear();
-    for (int i = 0; i <= segments; i++) {
-        float theta = 2.0f * PI * i / segments;
-        float cosTheta = cos(theta);
-        float sinTheta = sin(theta);
-        vertices.insert(vertices.end(), {
-            outerRadius * cosTheta, outerRadius * sinTheta, 0.0f,
-            cosTheta, sinTheta, 0.0f,
-            (float)i / segments, 0.0f
-        });
-        vertices.insert(vertices.end(), {
-            outerRadius * cosTheta, outerRadius * sinTheta, height,
-            cosTheta, sinTheta, 0.0f,
-            (float)i / segments, 1.0f
-        });
-        vertices.insert(vertices.end(), {
-            innerRadius * cosTheta, innerRadius * sinTheta, 0.0f,
-            -cosTheta, -sinTheta, 0.0f,
-            (float)i / segments, 0.0f
-        });
-        vertices.insert(vertices.end(), {
-            innerRadius * cosTheta, innerRadius * sinTheta, height,
-            -cosTheta, -sinTheta, 0.0f,
-            (float)i / segments, 1.0f
-        });
-    }
-    for (int i = 0; i < segments; i++) {
-        int i0 = i * 4;
-        int i1 = i * 4 + 1;
-        int i2 = i * 4 + 2;
-        int i3 = i * 4 + 3;
-        int n0 = (i + 1) * 4;
-        int n1 = (i + 1) * 4 + 1;
-        int n2 = (i + 1) * 4 + 2;
-        int n3 = (i + 1) * 4 + 3;
-        indices.insert(indices.end(), { 
-            (unsigned int)i0, (unsigned int)i1, (unsigned int)n1, 
-            (unsigned int)i0, (unsigned int)n1, (unsigned int)n0
-        });
-        indices.insert(indices.end(), { 
-            (unsigned int)i2, (unsigned int)n2, (unsigned int)n3,
-            (unsigned int)i2, (unsigned int)n3, (unsigned int)i3 
-        });
-        indices.insert(indices.end(), { 
-            (unsigned int)i1, (unsigned int)n1, (unsigned int)n3, 
-            (unsigned int)i1, (unsigned int)n3, (unsigned int)i3 
-        });
-        indices.insert(indices.end(), { 
-            (unsigned int)i0, (unsigned int)i2, (unsigned int)n2, 
-            (unsigned int)i0, (unsigned int)n2, (unsigned int)n0
-        });
-    }
-}
-
-GLuint CompileShader(GLenum type, const char* src) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, nullptr);
-    glCompileShader(shader);
-    GLint success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char log[512];
-        glGetShaderInfoLog(shader, 512, nullptr, log);
-        std::cerr << "Erro ao compilar shader:\n" << log << std::endl;
-    }
-    return shader;
-}
-
-GLuint CreateShaderProgram(const char* vertexSrc, const char* fragmentSrc) {
-    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertexSrc);
-    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragmentSrc);
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vs);
-    glAttachShader(program, fs);
-    glLinkProgram(program);
-    GLint success;
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (!success) {
-        char log[512];
-        glGetProgramInfoLog(program, 512, nullptr, log);
-        std::cerr << "Erro ao linkar programa:\n" << log << std::endl;
-    }
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-    return program;
-}
-
-GLuint CreateTexture(const char* imagePath) {
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load(imagePath, &width, &height, &nrChannels, 0);
-    if (data) {
-        GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    } else {
-        std::cerr << "Erro ao carregar textura: " << imagePath << std::endl;
-        unsigned char white[] = {255, 255, 255, 255};
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
-    }
-    stbi_image_free(data);
-    return texture;
-}
-
-int main() {
+GLFWwindow* createWindow() {
     if (!glfwInit()) {
-        std::cerr << "Erro ao inicializar GLFW\n";
-        return -1;
+        throw std::runtime_error("Erro ao inicializar GLFW");
     }
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, WINDOW_TITLE, nullptr, nullptr);
-    if (!window) {
-        std::cerr << "Erro ao criar janela GLFW\n";
+    GLFWwindow* window = glfwCreateWindow(
+        static_cast<int>(app::kWindowWidth),
+        static_cast<int>(app::kWindowHeight),
+        app::kWindowTitle,
+        nullptr,
+        nullptr
+    );
+
+    if (window == nullptr) {
+        glfwTerminate();
+        throw std::runtime_error("Erro ao criar janela GLFW");
+    }
+
+    glfwMakeContextCurrent(window);
+    if (!gladLoadGL(glfwGetProcAddress)) {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        throw std::runtime_error("Erro ao carregar OpenGL");
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glViewport(0, 0, app::kWindowWidth, app::kWindowHeight);
+    return window;
+}
+
+glm::vec3 orbitingLightPosition(float timeSeconds) {
+    return {
+        app::kLightOrbitRadius * sinf(timeSeconds),
+        2.0f,
+        app::kLightOrbitRadius * cosf(timeSeconds),
+    };
+}
+
+void setCommonUniforms(
+    GLuint program,
+    const glm::mat4& model,
+    const glm::mat4& view,
+    const glm::mat4& projection,
+    const glm::vec3& lightPos,
+    const glm::vec3& viewPos
+) {
+    glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniform3fv(glGetUniformLocation(program, "lightPos"), 1, glm::value_ptr(lightPos));
+    glUniform3fv(glGetUniformLocation(program, "viewPos"), 1, glm::value_ptr(viewPos));
+}
+
+void drawTexturedMesh(
+    GLuint program,
+    const MeshBuffers& mesh,
+    GLuint texture,
+    const glm::mat4& model,
+    const glm::mat4& view,
+    const glm::mat4& projection,
+    const glm::vec3& lightPos,
+    const glm::vec3& viewPos
+) {
+    glUseProgram(program);
+    setCommonUniforms(program, model, view, projection, lightPos, viewPos);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glUniform1i(glGetUniformLocation(program, "texture1"), 0);
+    glBindVertexArray(mesh.vao);
+    glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+}
+
+void drawLightMesh(
+    GLuint program,
+    const MeshBuffers& mesh,
+    const glm::vec3& lightPos,
+    const glm::mat4& view,
+    const glm::mat4& projection
+) {
+    glUseProgram(program);
+
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, lightPos);
+
+    glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    glBindVertexArray(mesh.vao);
+    glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+}
+
+}  // namespace
+
+int main() {
+    GLFWwindow* window = nullptr;
+
+    try {
+        window = createWindow();
+
+        CameraController camera;
+        camera.attach(window);
+
+        const GLuint objectShader = createShaderProgramFromFiles(
+            "shaders/object_vertex.glsl",
+            "shaders/object_fragment.glsl"
+        );
+        const GLuint lightShader = createShaderProgramFromFiles(
+            "shaders/vertex.glsl",
+            "shaders/fragment.glsl"
+        );
+
+        const MeshData tubeMeshData = generateTube(
+            app::kTubeInnerRadius,
+            app::kTubeOuterRadius,
+            app::kTubeHeight,
+            app::kTubeSegments
+        );
+        const MeshData sphereMeshData = generateSphere(
+            app::kLightSphereRadius,
+            app::kLightSphereSectors,
+            app::kLightSphereStacks
+        );
+
+        MeshBuffers tubeMesh = createMeshBuffers(tubeMeshData.vertices, tubeMeshData.indices, true);
+        MeshBuffers groundMesh = createMeshBuffers(
+            app::kGroundVertices.data(),
+            app::kGroundVertices.size() * sizeof(float),
+            app::kGroundIndices.data(),
+            app::kGroundIndices.size() * sizeof(unsigned int),
+            true
+        );
+        MeshBuffers lightMesh = createMeshBuffers(sphereMeshData.vertices, sphereMeshData.indices, false);
+
+        const GLuint tubeTexture = createTexture("wall.jpg");
+        const GLuint groundTexture = createTexture("ground.jpg");
+
+        while (!glfwWindowShouldClose(window)) {
+            const float currentFrame = static_cast<float>(glfwGetTime());
+            camera.updateDeltaTime(currentFrame);
+            camera.processInput(window);
+
+            const glm::vec3 lightPos = orbitingLightPosition(currentFrame);
+            const glm::mat4 view = camera.viewMatrix();
+            const glm::mat4 projection = glm::perspective(
+                glm::radians(camera.zoomDegrees()),
+                camera.aspectRatio(),
+                0.1f,
+                100.0f
+            );
+
+            glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            drawTexturedMesh(
+                objectShader,
+                tubeMesh,
+                tubeTexture,
+                glm::mat4(1.0f),
+                view,
+                projection,
+                lightPos,
+                camera.position()
+            );
+            drawTexturedMesh(
+                objectShader,
+                groundMesh,
+                groundTexture,
+                glm::mat4(1.0f),
+                view,
+                projection,
+                lightPos,
+                camera.position()
+            );
+            drawLightMesh(lightShader, lightMesh, lightPos, view, projection);
+
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+        }
+
+        destroyMeshBuffers(tubeMesh);
+        destroyMeshBuffers(groundMesh);
+        destroyMeshBuffers(lightMesh);
+        glDeleteTextures(1, &tubeTexture);
+        glDeleteTextures(1, &groundTexture);
+        glDeleteProgram(objectShader);
+        glDeleteProgram(lightShader);
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        if (window != nullptr) {
+            glfwDestroyWindow(window);
+        }
         glfwTerminate();
         return -1;
     }
-    glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    if (!gladLoadGL(glfwGetProcAddress)) {
-        std::cerr << "Erro ao carregar OpenGL\n";
-        return -1;
-    }
-    glEnable(GL_DEPTH_TEST);
-    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-
-    GLuint shaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);
-    GLuint lightShaderProgram = CreateShaderProgram(lightVertexShaderSource, lightFragmentShaderSource);
-
-    // Tubo
-    std::vector<float> tubeVertices;
-    std::vector<unsigned int> tubeIndices;
-    generateTube(tubeVertices, tubeIndices, 0.6f, 1.0f, 2.0f, 32);
-
-    GLuint tubeVAO, tubeVBO, tubeEBO;
-    glGenVertexArrays(1, &tubeVAO);
-    glGenBuffers(1, &tubeVBO);
-    glGenBuffers(1, &tubeEBO);
-
-    glBindVertexArray(tubeVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, tubeVBO);
-    glBufferData(GL_ARRAY_BUFFER, tubeVertices.size() * sizeof(float), tubeVertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tubeEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, tubeIndices.size() * sizeof(unsigned int), tubeIndices.data(), GL_STATIC_DRAW);
-    const GLuint stride = 8 * sizeof(float);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    GLuint tubeTexture = CreateTexture("wall.jpg");
-    GLuint groundTexture = CreateTexture("ground.jpg");
-
-    // Esfera de luz
-    std::vector<float> sphereVertices;
-    std::vector<unsigned int> sphereIndices;
-    generateSphere(sphereVertices, sphereIndices, 0.5f, 32, 16); // raio pequeno
-
-    GLuint sphereVAO, sphereVBO, sphereEBO;
-    glGenVertexArrays(1, &sphereVAO);
-    glGenBuffers(1, &sphereVBO);
-    glGenBuffers(1, &sphereEBO);
-
-    glBindVertexArray(sphereVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
-    glBufferData(GL_ARRAY_BUFFER, sphereVertices.size() * sizeof(float), sphereVertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(unsigned int), sphereIndices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-
-    // Chão
-    GLuint groundVAO, groundVBO, groundEBO;
-    glGenVertexArrays(1, &groundVAO);
-    glGenBuffers(1, &groundVBO);
-    glGenBuffers(1, &groundEBO);
-
-    glBindVertexArray(groundVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, groundVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(groundVertices), groundVertices, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, groundEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(groundIndices), groundIndices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-    glBindVertexArray(0);
-
-    while (!glfwWindowShouldClose(window)) {
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-        processInput(window);
-
-        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 
-                                               (float)SCR_WIDTH / (float)SCR_HEIGHT, 
-                                               0.1f, 100.0f);
-        glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-
-        // Tubo
-        glUseProgram(shaderProgram);
-        glm::mat4 model = glm::mat4(1.0f);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-        glUniform3fv(glGetUniformLocation(shaderProgram, "lightPos"), 1, glm::value_ptr(lightPos));
-        glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, tubeTexture);
-        glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
-        GLuint groundTexture = CreateTexture("ground.jpg");
-        glBindVertexArray(tubeVAO);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(tubeIndices.size()), GL_UNSIGNED_INT, 0);        
-        glBindVertexArray(0);
-
-        // Chão
-        glUseProgram(shaderProgram);
-        glm::mat4 groundModel = glm::mat4(1.0f);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(groundModel));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-        glUniform3fv(glGetUniformLocation(shaderProgram, "lightPos"), 1, glm::value_ptr(lightPos));
-        glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, groundTexture);
-        glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
-        glBindVertexArray(groundVAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
-
-        // Luz em órbita
-        float time = glfwGetTime();
-        lightPos.x = 5.0f * sin(time);
-        lightPos.z = 5.0f * cos(time);
-
-        // Esfera de luz
-        glUseProgram(lightShaderProgram);
-        glm::mat4 lightModel = glm::mat4(1.0f);
-        lightModel = glm::translate(lightModel, lightPos); 
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(lightModel));
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-        glBindVertexArray(sphereVAO);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(sphereIndices.size()), GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
-    glDeleteVertexArrays(1, &tubeVAO);
-    glDeleteBuffers(1, &tubeVBO);
-    glDeleteBuffers(1, &tubeEBO);
-    glDeleteTextures(1, &tubeTexture);
-    glDeleteVertexArrays(1, &sphereVAO);
-    glDeleteBuffers(1, &sphereVBO);
-    glDeleteBuffers(1, &sphereEBO);
-    glDeleteVertexArrays(1, &groundVAO);
-    glDeleteBuffers(1, &groundVBO);
-    glDeleteBuffers(1, &groundEBO);
-    glDeleteProgram(shaderProgram);
-    glDeleteProgram(lightShaderProgram);
-
-    glDeleteTextures(1, &groundTexture);
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    return 0;
-}
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
-}
-void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
-    }
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
-    lastX = xpos;
-    lastY = ypos;
-    float sensitivity = 0.3f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-    yaw += xoffset;
-    pitch += yoffset;
-    if (pitch > 89.0f) pitch = 89.0f;
-    if (pitch < -89.0f) pitch = -89.0f;
-    glm::vec3 front;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
-}
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) { /* ... */ }
-void processInput(GLFWwindow *window) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-    float cameraSpeed = 3.5f * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraUp;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraUp;
 }

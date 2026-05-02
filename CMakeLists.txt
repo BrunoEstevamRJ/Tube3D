@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(Tube)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(include)
 
@@ -13,7 +14,12 @@ pkg_check_modules(GLFW REQUIRED glfw3)
 # Tentar encontrar GLM
 find_package(glm QUIET)
 
-add_executable(Tube src/main.cpp)  
+add_executable(Tube
+    src/main.cpp
+    src/camera_controller.cpp
+    src/geometry.cpp
+    src/gl_utils.cpp
+)
 
 target_include_directories(Tube PRIVATE
     ${GLFW_INCLUDE_DIRS}
@@ -39,5 +45,9 @@ endif()
 add_custom_command(TARGET Tube POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_SOURCE_DIR}/wall.jpg
+    ${CMAKE_SOURCE_DIR}/ground.jpg
     $<TARGET_FILE_DIR:Tube>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/shaders
+    $<TARGET_FILE_DIR:Tube>/shaders
 )
