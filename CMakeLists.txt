@@ -16,14 +16,21 @@ find_package(glm QUIET)
 
 add_executable(Tube
     src/main.cpp
-    src/camera_controller.cpp
-    src/geometry.cpp
-    src/gl_utils.cpp
+    src/engine/Application.cpp
+    src/engine/Renderer.cpp
+    src/engine/Input.cpp
+    src/engine/Camera.cpp
+    src/engine/Shader.cpp
+    src/engine/Texture.cpp
+    src/engine/Mesh.cpp
+    src/engine/GameObject.cpp
+    src/engine/ParticleSystem.cpp
 )
 
 target_include_directories(Tube PRIVATE
     ${GLFW_INCLUDE_DIRS}
     include
+    src
 )
 
 target_link_libraries(Tube
