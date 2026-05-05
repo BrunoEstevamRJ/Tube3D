@@ -104,8 +104,10 @@ void Application::initializeScene() {
         ),
         Texture()
     );
+    lightSphere_.position = lightPosition(0.0f);
 
     particles_.initialize(500);
+    particles_.setEmitterPosition(lightSphere_.position);
 }
 
 void Application::shutdown() {
@@ -125,8 +127,9 @@ void Application::update(float currentFrame) {
     lastFrame_ = currentFrame;
 
     input_.process(window_, camera_, deltaTime);
-    particles_.update(deltaTime);
     lightSphere_.position = lightPosition(currentFrame);
+    particles_.setEmitterPosition(lightSphere_.position);
+    particles_.update(deltaTime);
 }
 
 void Application::render() {
@@ -135,7 +138,7 @@ void Application::render() {
 
     renderer_.renderScene(camera_, tube_, ground_, lightSphere_);
 
-    particles_.draw();
+    particles_.draw(camera_);
 }
 
 bool Application::isRunning() const {

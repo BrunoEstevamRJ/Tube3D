@@ -40,5 +40,6 @@ void Renderer::drawLightObject(const Camera& camera, const GameObject& lightSphe
     lightShader_.setMat4("model", lightSphere.modelMatrix());
     lightShader_.setMat4("view", camera.viewMatrix());
     lightShader_.setMat4("projection", camera.projectionMatrix());
+    lightShader_.setVec3("lightColor", glm::vec3(1.0f, 0.72f, 0.2f));
     lightSphere.mesh.draw();
 }
